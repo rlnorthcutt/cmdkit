@@ -10,7 +10,6 @@ import (
 	"syscall"
 
 	"github.com/rlnorthcutt/cmdkit/logger"
-	"github.com/spf13/cobra"
 )
 
 // UI holds interactive/TTY state for prompts and resolution. No global state.
@@ -66,31 +65,29 @@ func (u *UI) detail(msg string, v ...any) {
 }
 
 // ResolveString applies precedence: Flag > Env > Prompt > Default.
-// value is the default and is overwritten by the chosen source. The flag must exist and be a string flag.
-func (u *UI) ResolveString(cmd *cobra.Command, flagName, envKey, promptMsg string, value *string) {
-	if cmd.Flags().Changed(flagName) {
-		if v, err := cmd.Flags().GetString(flagName); err == nil {
-			*value = v
-			u.detail("resolved %s from flag: %s", flagName, v)
-		} else {
-			u.detail("flag %s changed but could not read string: %v", flagName, err)
-		}
+// Pass the flag's current value and whether it was explicitly set by the user;
+// these can come from any flag library (cobra, pflag, stdlib flag, etc).
+// value is the default and is overwritten by the chosen source.
+func (u *UI) ResolveString(flagValue string, flagSet bool, envKey, promptMsg string, value *string) {
+	if flagSet {
+		*value = flagValue
+		u.detail("resolved from flag: %s", flagValue)
 		return
 	}
 
 	if env := os.Getenv(envKey); env != "" {
 		*value = env
-		u.detail("resolved %s from env %s", flagName, envKey)
+		u.detail("resolved from env %s", envKey)
 		return
 	}
 
 	if u.Interactive {
 		*value = u.Prompt(fmt.Sprintf("%s (default: %s)", promptMsg, *value), *value)
-		u.detail("resolved %s from prompt", flagName)
+		u.detail("resolved from prompt")
 		return
 	}
 
-	u.detail("using default for %s: %s", flagName, *value)
+	u.detail("using default: %s", *value)
 }
 
 // Prompt reads a single line from stdin with an optional default. Returns defaultValue if input is empty.

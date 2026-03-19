@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/rlnorthcutt/cmdkit/ui"
-	"github.com/spf13/cobra"
 )
 
 // newUIWithInput replaces os.Stdin with a pipe containing the given input,
@@ -164,20 +163,12 @@ func TestConfirm_otherInputReturnsFalse(t *testing.T) {
 
 // --- ResolveString ---
 
-func newCmd() *cobra.Command {
-	cmd := &cobra.Command{}
-	cmd.Flags().String("input", "", "test flag")
-	return cmd
-}
-
 func TestResolveString_flagWins(t *testing.T) {
-	cmd := newCmd()
-	cmd.Flags().Set("input", "from-flag")
 	t.Setenv("INPUT_KEY", "from-env")
 
 	u := ui.New(true)
 	value := "default"
-	u.ResolveString(cmd, "input", "INPUT_KEY", "Enter input", &value)
+	u.ResolveString("from-flag", true, "INPUT_KEY", "Enter input", &value)
 
 	if value != "from-flag" {
 		t.Errorf("expected flag value, got %q", value)
@@ -185,12 +176,11 @@ func TestResolveString_flagWins(t *testing.T) {
 }
 
 func TestResolveString_envWins(t *testing.T) {
-	cmd := newCmd()
 	t.Setenv("INPUT_KEY", "from-env")
 
 	u := ui.New(true)
 	value := "default"
-	u.ResolveString(cmd, "input", "INPUT_KEY", "Enter input", &value)
+	u.ResolveString("", false, "INPUT_KEY", "Enter input", &value)
 
 	if value != "from-env" {
 		t.Errorf("expected env value, got %q", value)
@@ -198,12 +188,11 @@ func TestResolveString_envWins(t *testing.T) {
 }
 
 func TestResolveString_defaultUsed(t *testing.T) {
-	cmd := newCmd()
-	t.Setenv("INPUT_KEY", "") // ensure unset
+	t.Setenv("INPUT_KEY", "")
 
 	u := ui.New(true) // non-interactive, no prompt
 	value := "my-default"
-	u.ResolveString(cmd, "input", "INPUT_KEY", "Enter input", &value)
+	u.ResolveString("", false, "INPUT_KEY", "Enter input", &value)
 
 	if value != "my-default" {
 		t.Errorf("expected default value, got %q", value)
@@ -211,14 +200,13 @@ func TestResolveString_defaultUsed(t *testing.T) {
 }
 
 func TestResolveString_promptUsed(t *testing.T) {
-	cmd := newCmd()
 	t.Setenv("INPUT_KEY", "")
 
 	u := newUIWithInput(false, "from-prompt\n")
 	u.Interactive = true // force interactive since test runner stdin is not a TTY
 
 	value := "default"
-	u.ResolveString(cmd, "input", "INPUT_KEY", "Enter input", &value)
+	u.ResolveString("", false, "INPUT_KEY", "Enter input", &value)
 
 	if value != "from-prompt" {
 		t.Errorf("expected prompt value, got %q", value)
@@ -226,8 +214,7 @@ func TestResolveString_promptUsed(t *testing.T) {
 }
 
 func TestResolveString_noLogger_noRace(t *testing.T) {
-	cmd := newCmd()
 	u := ui.New(true) // no WithLogger
 	value := "default"
-	u.ResolveString(cmd, "input", "INPUT_KEY", "Enter input", &value) // must not panic
+	u.ResolveString("", false, "INPUT_KEY", "Enter input", &value) // must not panic
 }

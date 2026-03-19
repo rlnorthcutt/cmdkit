@@ -1,6 +1,6 @@
 # cmdkit
 
-Lightweight Go library for building simple, dependency-conscious CLI tools. Provides a colored logger, interactive config resolution (Flag > Env > Prompt > Default), and graceful signal handling. No global state; initialize components once and pass them through your execute flow.
+Lightweight Go library for building simple CLI tools. Provides a colored logger, interactive config resolution (Flag > Env > Prompt > Default), and graceful signal handling. No global state. No external dependencies — stdlib only.
 
 ## Packages
 
@@ -24,7 +24,7 @@ Colored, level-aware output. All methods accept a printf-style format string and
 
 Interactive prompts, TTY detection, config resolution, and signal handling. All in one session object.
 
-**Config resolution** via `ResolveString` applies this precedence: Flag > Env > Prompt > Default. The value pointer is updated in place with whichever source wins.
+**Config resolution** via `ResolveString` applies this precedence: Flag > Env > Prompt > Default. The value pointer is updated in place with whichever source wins. Pass the flag's current value and a boolean indicating whether it was explicitly set — works with any flag library (cobra, pflag, stdlib `flag`, etc).
 
 **Signal handling** via `WithInterrupt` registers SIGINT/SIGTERM handlers and stores a cancellable context on `ui.Ctx`. Pass `ui.Ctx` to long-running operations so Ctrl+C cancels them cleanly. Call `StopSignal()` (typically via `defer`) to release the handler when the command exits.
 
@@ -48,7 +48,9 @@ func execute(cmd *cobra.Command, args []string) {
     defer userInterface.StopSignal()
 
     // 2. Resolve config: flag > env > prompt > default
-    userInterface.ResolveString(cmd, "input", "TOOL_INPUT", "Enter URL", &cfg.Input)
+    // Look up the flag value with whatever library you use — cmdkit is framework-agnostic
+    inputVal, _ := cmd.Flags().GetString("input")
+    userInterface.ResolveString(inputVal, cmd.Flags().Changed("input"), "TOOL_INPUT", "Enter URL", &cfg.Input)
 
     // 3. Summarize & confirm
     fmt.Printf("Target: %s\n", cfg.Input)
