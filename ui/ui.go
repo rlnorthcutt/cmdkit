@@ -12,6 +12,15 @@ import (
 	"github.com/rlnorthcutt/cmdkit/logger"
 )
 
+// parseBoolEnv returns true for "true", "1", "y", or "yes" (case-insensitive).
+func parseBoolEnv(s string) bool {
+	switch strings.ToLower(s) {
+	case "true", "1", "yes", "y":
+		return true
+	}
+	return false
+}
+
 // UI holds interactive/TTY state for prompts and resolution. No global state.
 // Ctx is always safe to pass to long-running operations; it is context.Background() until
 // WithInterrupt is called, after which it cancels on SIGINT or SIGTERM.
@@ -82,12 +91,35 @@ func (u *UI) ResolveString(flagValue string, flagSet bool, envKey, promptMsg str
 	}
 
 	if u.Interactive {
-		*value = u.Prompt(fmt.Sprintf("%s (default: %s)", promptMsg, *value), *value)
+		prompt := promptMsg
+		if *value != "" {
+			prompt = fmt.Sprintf("%s (default: %s)", promptMsg, *value)
+		}
+		*value = u.Prompt(prompt, *value)
 		u.detail("resolved from prompt")
 		return
 	}
 
 	u.detail("using default: %s", *value)
+}
+
+// ResolveBool applies precedence: Flag > Env > Default.
+// There is no prompt tier for booleans — use Confirm for interactive boolean input.
+// Env values of "true", "1", or "yes" (case-insensitive) are treated as true; anything else is false.
+func (u *UI) ResolveBool(flagValue bool, flagSet bool, envKey string, value *bool) {
+	if flagSet {
+		*value = flagValue
+		u.detail("resolved from flag: %v", flagValue)
+		return
+	}
+
+	if env := os.Getenv(envKey); env != "" {
+		*value = parseBoolEnv(env)
+		u.detail("resolved from env %s", envKey)
+		return
+	}
+
+	u.detail("using default: %v", *value)
 }
 
 // Prompt reads a single line from stdin with an optional default. Returns defaultValue if input is empty.
@@ -117,4 +149,3 @@ func (u *UI) Confirm(message string) bool {
 	res := u.Prompt(message+" (y/n)", "y")
 	return strings.ToLower(res) == "y"
 }
-

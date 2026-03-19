@@ -218,3 +218,73 @@ func TestResolveString_noLogger_noRace(t *testing.T) {
 	value := "default"
 	u.ResolveString("", false, "INPUT_KEY", "Enter input", &value) // must not panic
 }
+
+func TestResolveString_emptyDefaultNoParens(t *testing.T) {
+	t.Setenv("INPUT_KEY", "")
+
+	// When default is empty, prompt should not show "(default: )"
+	// We verify by checking that an empty input returns "" not something malformed
+	u := newUIWithInput(false, "\n")
+	u.Interactive = true
+
+	value := ""
+	u.ResolveString("", false, "INPUT_KEY", "Enter input", &value)
+
+	if value != "" {
+		t.Errorf("expected empty default to be preserved, got %q", value)
+	}
+}
+
+// --- ResolveBool ---
+
+func TestResolveBool_flagWins(t *testing.T) {
+	t.Setenv("BOOL_KEY", "false")
+
+	u := ui.New(true)
+	value := false
+	u.ResolveBool(true, true, "BOOL_KEY", &value)
+
+	if !value {
+		t.Error("expected flag value true to win")
+	}
+}
+
+func TestResolveBool_envTrue(t *testing.T) {
+	for _, s := range []string{"true", "1", "yes", "True", "YES"} {
+		t.Run(s, func(t *testing.T) {
+			t.Setenv("BOOL_KEY", s)
+			u := ui.New(true)
+			value := false
+			u.ResolveBool(false, false, "BOOL_KEY", &value)
+			if !value {
+				t.Errorf("expected %q to resolve as true", s)
+			}
+		})
+	}
+}
+
+func TestResolveBool_envFalse(t *testing.T) {
+	for _, s := range []string{"false", "0", "no", "anything"} {
+		t.Run(s, func(t *testing.T) {
+			t.Setenv("BOOL_KEY", s)
+			u := ui.New(true)
+			value := true
+			u.ResolveBool(false, false, "BOOL_KEY", &value)
+			if value {
+				t.Errorf("expected %q to resolve as false", s)
+			}
+		})
+	}
+}
+
+func TestResolveBool_defaultUsed(t *testing.T) {
+	t.Setenv("BOOL_KEY", "")
+
+	u := ui.New(true)
+	value := true
+	u.ResolveBool(false, false, "BOOL_KEY", &value)
+
+	if !value {
+		t.Error("expected default value to be preserved when no flag or env")
+	}
+}

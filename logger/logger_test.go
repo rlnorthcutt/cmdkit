@@ -2,7 +2,6 @@ package logger_test
 
 import (
 	"bytes"
-	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -11,121 +10,154 @@ import (
 	"github.com/rlnorthcutt/cmdkit/logger"
 )
 
-func captureStdout(f func()) string {
-	r, w, _ := os.Pipe()
-	old := os.Stdout
-	os.Stdout = w
-	f()
-	w.Close()
-	os.Stdout = old
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	return buf.String()
+// newLogger returns a logger with buffers wired for stdout and stderr.
+func newLogger(verbose bool) (*logger.Logger, *bytes.Buffer, *bytes.Buffer) {
+	out := &bytes.Buffer{}
+	err := &bytes.Buffer{}
+	return logger.New(verbose).WithWriters(out, err), out, err
 }
 
-func captureStderr(f func()) string {
-	r, w, _ := os.Pipe()
-	old := os.Stderr
-	os.Stderr = w
-	f()
-	w.Close()
-	os.Stderr = old
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	return buf.String()
-}
+// --- Destination: stdout vs stderr ---
 
 func TestInfo_stdout(t *testing.T) {
-	log := logger.New(false)
-	out := captureStdout(func() { log.Info("hello") })
-	if !strings.Contains(out, "[INFO]") {
-		t.Errorf("expected [INFO] in stdout, got: %q", out)
+	log, out, err := newLogger(false)
+	log.Info("hello")
+	if !strings.Contains(out.String(), "[INFO]") || !strings.Contains(out.String(), "hello") {
+		t.Errorf("expected [INFO] and message on stdout, got: %q", out.String())
 	}
-	if !strings.Contains(out, "hello") {
-		t.Errorf("expected message in stdout, got: %q", out)
-	}
-}
-
-func TestInfo_notOnStderr(t *testing.T) {
-	log := logger.New(false)
-	err := captureStderr(func() { log.Info("hello") })
-	if err != "" {
-		t.Errorf("expected nothing on stderr, got: %q", err)
+	if err.String() != "" {
+		t.Errorf("expected nothing on stderr, got: %q", err.String())
 	}
 }
 
 func TestSuccess_stdout(t *testing.T) {
-	log := logger.New(false)
-	out := captureStdout(func() { log.Success("done") })
-	if !strings.Contains(out, "[SUCCESS]") {
-		t.Errorf("expected [SUCCESS] in stdout, got: %q", out)
+	log, out, err := newLogger(false)
+	log.Success("done")
+	if !strings.Contains(out.String(), "[SUCCESS]") || !strings.Contains(out.String(), "done") {
+		t.Errorf("expected [SUCCESS] and message on stdout, got: %q", out.String())
 	}
-	if !strings.Contains(out, "done") {
-		t.Errorf("expected message in stdout, got: %q", out)
+	if err.String() != "" {
+		t.Errorf("expected nothing on stderr, got: %q", err.String())
 	}
 }
 
 func TestWarn_stderr(t *testing.T) {
-	log := logger.New(false)
-	out := captureStdout(func() { log.Warn("watch out") })
-	err := captureStderr(func() { log.Warn("watch out") })
-	if out != "" {
-		t.Errorf("expected nothing on stdout for Warn, got: %q", out)
+	log, out, err := newLogger(false)
+	log.Warn("watch out")
+	if out.String() != "" {
+		t.Errorf("expected nothing on stdout for Warn, got: %q", out.String())
 	}
-	if !strings.Contains(err, "[WARNING]") {
-		t.Errorf("expected [WARNING] in stderr, got: %q", err)
-	}
-	if !strings.Contains(err, "watch out") {
-		t.Errorf("expected message in stderr, got: %q", err)
+	if !strings.Contains(err.String(), "[WARNING]") || !strings.Contains(err.String(), "watch out") {
+		t.Errorf("expected [WARNING] and message on stderr, got: %q", err.String())
 	}
 }
 
 func TestError_stderr(t *testing.T) {
-	log := logger.New(false)
-	out := captureStdout(func() { log.Error("bad thing") })
-	err := captureStderr(func() { log.Error("bad thing") })
-	if out != "" {
-		t.Errorf("expected nothing on stdout for Error, got: %q", out)
+	log, out, err := newLogger(false)
+	log.Error("bad thing")
+	if out.String() != "" {
+		t.Errorf("expected nothing on stdout for Error, got: %q", out.String())
 	}
-	if !strings.Contains(err, "[ERROR]") {
-		t.Errorf("expected [ERROR] in stderr, got: %q", err)
-	}
-	if !strings.Contains(err, "bad thing") {
-		t.Errorf("expected message in stderr, got: %q", err)
+	if !strings.Contains(err.String(), "[ERROR]") || !strings.Contains(err.String(), "bad thing") {
+		t.Errorf("expected [ERROR] and message on stderr, got: %q", err.String())
 	}
 }
 
-func TestDebug_alwaysPrints(t *testing.T) {
-	logQuiet := logger.New(false)
-	out := captureStdout(func() { logQuiet.Debug("dbg") })
-	if !strings.Contains(out, "dbg") {
-		t.Errorf("Debug should print even when not verbose, got: %q", out)
-	}
-}
+// --- Verbose / quiet gating ---
 
 func TestDetail_verbose(t *testing.T) {
-	log := logger.New(true)
-	out := captureStdout(func() { log.Detail("details") })
-	if !strings.Contains(out, "details") {
-		t.Errorf("Detail should print when verbose, got: %q", out)
+	log, out, _ := newLogger(true)
+	log.Detail("details")
+	if !strings.Contains(out.String(), "details") {
+		t.Errorf("Detail should print when verbose, got: %q", out.String())
 	}
 }
 
 func TestDetail_nonVerbose(t *testing.T) {
-	log := logger.New(false)
-	out := captureStdout(func() { log.Detail("details") })
-	if out != "" {
-		t.Errorf("Detail should not print when not verbose, got: %q", out)
+	log, out, _ := newLogger(false)
+	log.Detail("details")
+	if out.String() != "" {
+		t.Errorf("Detail should not print when not verbose, got: %q", out.String())
 	}
 }
 
-func TestFormatString(t *testing.T) {
-	log := logger.New(false)
-	out := captureStdout(func() { log.Info("count: %d, name: %s", 3, "foo") })
-	if !strings.Contains(out, "count: 3, name: foo") {
-		t.Errorf("expected formatted message in output, got: %q", out)
+func TestDebug_alwaysPrints(t *testing.T) {
+	log, out, _ := newLogger(false)
+	log.Debug("dbg")
+	if !strings.Contains(out.String(), "dbg") {
+		t.Errorf("Debug should print even when not verbose, got: %q", out.String())
 	}
 }
+
+func TestQuiet_suppressesInfoSuccessDetail(t *testing.T) {
+	log, out, err := newLogger(true)
+	log.WithQuiet()
+	log.Info("info msg")
+	log.Success("success msg")
+	log.Detail("detail msg")
+	if out.String() != "" {
+		t.Errorf("quiet mode should suppress Info/Success/Detail, got stdout: %q", out.String())
+	}
+	if err.String() != "" {
+		t.Errorf("unexpected stderr output: %q", err.String())
+	}
+}
+
+func TestQuiet_doesNotSuppressWarnErrorDebug(t *testing.T) {
+	log, out, err := newLogger(false)
+	log.WithQuiet()
+	log.Warn("warn msg")
+	log.Error("error msg")
+	log.Debug("debug msg")
+	if !strings.Contains(err.String(), "[WARNING]") {
+		t.Errorf("Warn should not be suppressed in quiet mode, got: %q", err.String())
+	}
+	if !strings.Contains(err.String(), "[ERROR]") {
+		t.Errorf("Error should not be suppressed in quiet mode, got: %q", err.String())
+	}
+	if !strings.Contains(out.String(), "[--dEbUg--]") {
+		t.Errorf("Debug should not be suppressed in quiet mode, got: %q", out.String())
+	}
+}
+
+// --- Print ---
+
+func TestPrint_noPrefix(t *testing.T) {
+	log, out, _ := newLogger(false)
+	log.Print("plain line")
+	if out.String() != "plain line\n" {
+		t.Errorf("expected plain output, got: %q", out.String())
+	}
+}
+
+func TestPrint_suppressedInQuiet(t *testing.T) {
+	log, out, _ := newLogger(false)
+	log.WithQuiet()
+	log.Print("should be hidden")
+	if out.String() != "" {
+		t.Errorf("Print should be suppressed in quiet mode, got: %q", out.String())
+	}
+}
+
+func TestPrint_format(t *testing.T) {
+	log, out, _ := newLogger(false)
+	log.Print("value: %d", 42)
+	if !strings.Contains(out.String(), "value: 42") {
+		t.Errorf("expected formatted output, got: %q", out.String())
+	}
+}
+
+// --- Format string safety ---
+
+func TestFormatString(t *testing.T) {
+	log, out, _ := newLogger(false)
+	log.Info("count: %d, name: %s", 3, "foo")
+	if !strings.Contains(out.String(), "count: 3, name: foo") {
+		t.Errorf("expected formatted message, got: %q", out.String())
+	}
+}
+
+// --- Fatal (subprocess) ---
 
 // TestFatal runs Fatal in a subprocess to safely test os.Exit(1) behavior.
 func TestFatal(t *testing.T) {
